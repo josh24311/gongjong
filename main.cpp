@@ -2,6 +2,7 @@
 #include <vector>
 #include <ctime>
 #include <cstdlib>
+#include <string>
 
 using namespace std;
 
@@ -9,8 +10,7 @@ using namespace std;
 #define TOTAL_PLAYERS 4
 #define TOTAL_CARDS 40
 #define sameColor(num1, num2) (((num1-1)/10 + (num2-1)/10) == 3)
-#define sameNumber(num1, num2) ((num1-1)%10 == (num2-1)%10)
-#define isPair(num1, num2) (sameNumber(num1, num2) && sameColor(num1, num2))
+
 /*
 【遊戲規則】
 1. 牌組：40張牌，1莊3閒，共5輪，每輪每人2張牌。
@@ -30,20 +30,26 @@ C1~C10 (1~10), D1~D10 (11~20), H1~H10 (21~30), S1~S10 (31~40)
 
 class Gongjong {
 public:
-    struct Card {
-        int number;
-    };
+    string cardToStr(int num) {
+        string suits[] = {"♣", "♦", "♥", "♠"};
+        return suits[(num - 1) / 10] + to_string((num - 1) %10 + 1);
+    }
     struct Player {
-        Card hold[2];
-        int score;
-        int larger;
-        int WL;
-        int gotPair;
-    };
+        int cards[2];
+        int score, larger, WL, gotPair;
+
+        void evaluate() {
+            int p1 = (cards[0] - 1) % 10 + 1;
+            int p2 = (cards[1] - 1) % 10 + 1;
+            gotPair = (p1 == p2) && (sameColor(cards[0], cards[1]));
+            score = gotPair ? p1 : (p1 + p2) % 10;
+            larger = max(p1, p2);
+        }
+    } players[TOTAL_PLAYERS];
 
     Gongjong() : index(0) {
         for(int i = 0; i < TOTAL_CARDS; ++i) {
-            cards[i].number = 0;
+            decks[i] = 0;
         }
     }
 
@@ -62,14 +68,14 @@ public:
         cout << "Initializing game..." << endl;
         index = 0;
         for (int i = 0; i < TOTAL_CARDS; i++) {
-            cards[i].number = i + 1;
+            decks[i] = i + 1;
         }
         for (int i = 0; i < TOTAL_CARDS; i++) {
             int r = rand() % TOTAL_CARDS;
-            // Swap number of cards[i] and cards[r]
-            int temp = cards[i].number;
-            cards[i].number = cards[r].number;
-            cards[r].number = temp;
+            // Swap number of decks[i] and decks[r]
+            int temp = decks[i];
+            decks[i] = decks[r];
+            decks[r] = temp;
         }
     }
 
@@ -77,73 +83,32 @@ public:
         cout << "Dealing cards..." << endl;
         for (int i = 0; i < TOTAL_PLAYERS; i++) {
             if (index + 1 < TOTAL_CARDS) {
-                players[i].hold[0] = cards[index++];
-                players[i].hold[1] = cards[index++];
+                players[i].cards[0] = decks[index++];
+                players[i].cards[1] = decks[index++];
             }
         }
     }
+    bool doesPlayerWin(Player& p, Player& m) {
+        if (p.gotPair != m.gotPair) return p.gotPair;
+        if (p.score != m.score) return (p.score > m.score);
+        return p.larger > m.larger;
+    }
 
     void playRound() {
-        int p1 = 0, p2 = 0;
         cout << "Playing round..." << endl;
-        
         for (int i = 0; i < TOTAL_PLAYERS; i++) {
             cout << "Player " << i + 1 << " holds: ";
             for (int j = 0; j < 2; j++) {
-                int val = players[i].hold[j].number;
-                if (val >= 1 && val <= 10) cout << "♣" << val;
-                else if (val >= 11 && val <= 20) cout << "♦" << val - 10;
-                else if (val >= 21 && val <= 30) cout << "♥" << val - 20;
-                else if (val >= 31 && val <= 40) cout << "♠" << val - 30;
-                if (j == 0) cout << ", ";
+                cout << cardToStr(players[i].cards[j]) << " ";
             }
             cout << endl;
         }
-        for (int i = 0; i < TOTAL_PLAYERS; i++) {
-            p1 = (players[i].hold[0].number)%10;
-            if (p1 == 0) p1 = 10;
-            p2 = (players[i].hold[1].number)%10;
-            if (p2 == 0) p2 = 10;
-            if (isPair(players[i].hold[0].number, players[i].hold[1].number)) {
-                players[i].gotPair = 1;
-                players[i].score = p1;
+        for (auto& p : players) p.evaluate();
+        for (int i = 1; i < TOTAL_PLAYERS; i++) {
+            if (players[i].score == 0) {
+                players[i].WL = 0;
             } else {
-                players[i].gotPair = 0;
-                players[i].score = (p1 + p2) % 10;
-                players[i].larger = (p1 > p2) ? p1 : p2;
-            }
-        }
-        if (players[0].gotPair) {
-            for (int i = 1; i < TOTAL_PLAYERS; i++) {
-                if (players[i].gotPair) {
-                    if (players[i].score > players[0].score) {
-                        players[i].WL = 1;
-                    } else if (players[i].score <= players[0].score) {
-                        players[i].WL = 0;
-                    }
-                } else {
-                    players[i].WL = 0;
-                }
-            }
-        } else {
-            for (int i = 1; i < TOTAL_PLAYERS; i++) {
-                if (players[i].gotPair) {
-                    players[i].WL = 1;
-                } else {
-                    if (players[i].score == 0) {//閒家目賊
-                        players[i].WL = 0;
-                    } else if (players[i].score > players[0].score) {
-                        players[i].WL = 1;
-                    } else if (players[i].score == players[0].score) {
-                        if (players[i].larger > players[0].larger) {
-                            players[i].WL = 1;
-                        } else {
-                            players[i].WL = 0;
-                        }
-                    } else {
-                        players[i].WL = 0;
-                    }
-                }
+                players[i].WL  = doesPlayerWin(players[i], players[0]);
             }
         }
     }
@@ -151,7 +116,7 @@ public:
     void printResults() {
         cout << "--- Results ---" << endl;
         for (int i = 0; i < TOTAL_PLAYERS; i++) {
-            if (i == 0) cout << "[Master]   ";
+            if (i == 0) cout << "[Master  ] ";
             else cout << "[Player " << i + 1 << "] ";
 
             cout << "Score: " << players[i].score;
@@ -166,8 +131,7 @@ public:
     }
 
 private:
-    Card cards[TOTAL_CARDS];
-    Player players[TOTAL_PLAYERS];
+    int decks[TOTAL_CARDS];
     int index;
 };
 
